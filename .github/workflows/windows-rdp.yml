@@ -9,28 +9,13 @@ jobs:
     timeout-minutes: 360
 
     steps:
-    - name: Enable RDP & Force Session
+    - name: Enable RDP
       run: |
-        # تفعيل RDP
         Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -name "fDenyTSConnections" -Value 0
         Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
-        
-        # تعطيل طلب المصادقة (لتسهيل الاتصال)
         Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -name "UserAuthentication" -Value 0
         Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -name "fPromptForPassword" -Value 0
-        
-        # السماح بالجلسات المتعددة
-        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -name "fSingleSessionPerUser" -Value 0
-        
-        # إعداد كلمة المرور
         net user runneradmin "P@ssw0rd!"
-        
-        # إضافة المستخدم إلى مجموعة المسؤولين
-        net localgroup Administrators runneradmin /add
-        
-        # تحويل الجلسة إلى Console لكي تبقى مفتوحة
-        Start-Process -FilePath "tscon.exe" -ArgumentList "1 /dest:console" -NoNewWindow -ErrorAction SilentlyContinue
-        
         Write-Host "RDP Enabled Successfully!"
 
     - name: Start Bore Tunnel
@@ -38,7 +23,7 @@ jobs:
         Invoke-WebRequest -Uri "https://github.com/ekzhang/bore/releases/download/v0.5.0/bore-v0.5.0-x86_64-pc-windows-msvc.zip" -OutFile "bore.zip"
         Expand-Archive -Path "bore.zip" -DestinationPath "."
         
-        # تشغيل النفق في الخلفية
+        # تشغيل النفق وإبقائه يعمل
         Start-Process -FilePath ".\bore.exe" -ArgumentList "local 3389 --to bore.pub" -NoNewWindow -RedirectStandardOutput "bore.log" -RedirectStandardError "bore.log"
         Start-Sleep -Seconds 10
 
@@ -56,7 +41,8 @@ jobs:
             Write-Host "Password: P@ssw0rd!"
             Write-Host "====================================="
         } else {
-            Write-Host "Could not find IP." -ForegroundColor Red
+            Write-Host "Could not find IP. Check logs." -ForegroundColor Red
         }
         
+        # إبقاء السيرفر شغالاً
         Start-Sleep -Seconds 21600
