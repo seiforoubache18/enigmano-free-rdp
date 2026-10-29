@@ -9,30 +9,45 @@ jobs:
     timeout-minutes: 360
 
     steps:
-    - name: Enable RDP
+    - name: Enable RDP & Force Session
       run: |
+        # تفعيل RDP
         Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -name "fDenyTSConnections" -Value 0
         Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
+        
+        # تعطيل طلب المصادقة (لتسهيل الاتصال)
         Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -name "UserAuthentication" -Value 0
+        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -name "fPromptForPassword" -Value 0
+        
+        # السماح بالجلسات المتعددة
+        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -name "fSingleSessionPerUser" -Value 0
+        
+        # إعداد كلمة المرور
         net user runneradmin "P@ssw0rd!"
+        
+        # إضافة المستخدم إلى مجموعة المسؤولين
+        net localgroup Administrators runneradmin /add
+        
+        # تحويل الجلسة إلى Console لكي تبقى مفتوحة
+        Start-Process -FilePath "tscon.exe" -ArgumentList "1 /dest:console" -NoNewWindow -ErrorAction SilentlyContinue
+        
+        Write-Host "RDP Enabled Successfully!"
 
-    - name: Download and Start Bore Tunnel
+    - name: Start Bore Tunnel
       run: |
-        # تحميل أداة bore المجانية
         Invoke-WebRequest -Uri "https://github.com/ekzhang/bore/releases/download/v0.5.0/bore-v0.5.0-x86_64-pc-windows-msvc.zip" -OutFile "bore.zip"
         Expand-Archive -Path "bore.zip" -DestinationPath "."
         
         # تشغيل النفق في الخلفية
-        Start-Process -FilePath ".\bore.exe" -ArgumentList "local 3389 --to bore.pub" -NoNewWindow -RedirectStandardError "bore.err"
+        Start-Process -FilePath ".\bore.exe" -ArgumentList "local 3389 --to bore.pub" -NoNewWindow -RedirectStandardOutput "bore.log" -RedirectStandardError "bore.log"
         Start-Sleep -Seconds 10
 
     - name: Show Connection Details
       run: |
-        $log = Get-Content bore.err -Raw -ErrorAction SilentlyContinue
-        Write-Host "Bore Logs:"
+        $log = Get-Content bore.log -Raw -ErrorAction SilentlyContinue
+        Write-Host "Bore Logs:" -ForegroundColor Yellow
         Write-Host $log
         
-        # استخراج العنوان من السجلات
         if ($log -match 'listening at (bore\.pub:\d+)') {
             $rdp_ip = $matches[1]
             Write-Host "====================================="
@@ -41,8 +56,7 @@ jobs:
             Write-Host "Password: P@ssw0rd!"
             Write-Host "====================================="
         } else {
-            Write-Host "Could not find IP in tunnel logs." -ForegroundColor Red
+            Write-Host "Could not find IP." -ForegroundColor Red
         }
         
-        # إبقاء السيرفر يعمل لمدة 6 ساعات
         Start-Sleep -Seconds 21600
