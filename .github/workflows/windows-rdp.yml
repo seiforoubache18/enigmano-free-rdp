@@ -16,23 +16,25 @@ jobs:
         Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -name "UserAuthentication" -Value 0
         net user runneradmin "P@ssw0rd!"
 
-    - name: Start SSH Tunnel (No Card Required)
+    - name: Start Pinggy Tunnel
       run: |
-        # استخدام خدمة localhost.run المجانية لإنشاء نفق TCP
-        Start-Process -FilePath "ssh" -ArgumentList "-o StrictHostKeyChecking=no -o ServerAliveInterval=60 -R 0:localhost:3389 nokey@localhost.run" -NoNewWindow -RedirectStandardOutput "tunnel.out" -RedirectStandardError "tunnel.err"
-        Start-Sleep -Seconds 20
+        # تشغيل نفق Pinggy في الخلفية
+        Start-Process -FilePath "ssh" -ArgumentList "-p 443 -o StrictHostKeyChecking=no -o ServerAliveInterval=60 -R0:localhost:3389 a.pinggy.io" -NoNewWindow -RedirectStandardOutput "tunnel.out" -RedirectStandardError "tunnel.err"
+        Start-Sleep -Seconds 15
 
     - name: Show Connection Details
       run: |
-        $log = Get-Content tunnel.err -Raw -ErrorAction SilentlyContinue
-        $log2 = Get-Content tunnel.out -Raw -ErrorAction SilentlyContinue
-        $all_logs = "$log $log2"
+        $log = Get-Content tunnel.out -Raw -ErrorAction SilentlyContinue
+        $err = Get-Content tunnel.err -Raw -ErrorAction SilentlyContinue
+        $all_logs = "$log $err"
         
         Write-Host "Tunnel Logs:"
         Write-Host $all_logs
         
-        if ($all_logs -match '(tcp://[a-zA-Z0-9.-]+:\d+)') {
-            $rdp_ip = $matches[1] -replace "tcp://", ""
+        # استخراج الـ IP الخاص بـ Pinggy
+        $matches = [regex]::Matches($all_logs, 'tcp://([a-zA-Z0-9.-]+:\d+)')
+        if ($matches.Count -gt 0) {
+            $rdp_ip = $matches[0].Groups[1].Value
             Write-Host "====================================="
             Write-Host "RDP IP: $rdp_ip" -ForegroundColor Green
             Write-Host "Username: runneradmin"
@@ -41,4 +43,5 @@ jobs:
         } else {
             Write-Host "Could not find IP in tunnel logs. Please check the logs above." -ForegroundColor Red
         }
+        # إبقاء السيرفر يعمل لمدة 6 ساعات
         Start-Sleep -Seconds 21600
