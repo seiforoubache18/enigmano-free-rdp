@@ -16,32 +16,33 @@ jobs:
         Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -name "UserAuthentication" -Value 0
         net user runneradmin "P@ssw0rd!"
 
-    - name: Start Pinggy Tunnel
+    - name: Download and Start Bore Tunnel
       run: |
-        # تشغيل نفق Pinggy في الخلفية
-        Start-Process -FilePath "ssh" -ArgumentList "-p 443 -o StrictHostKeyChecking=no -o ServerAliveInterval=60 -R0:localhost:3389 a.pinggy.io" -NoNewWindow -RedirectStandardOutput "tunnel.out" -RedirectStandardError "tunnel.err"
-        Start-Sleep -Seconds 15
+        # تحميل أداة bore المجانية
+        Invoke-WebRequest -Uri "https://github.com/ekzhang/bore/releases/download/v0.5.0/bore-v0.5.0-x86_64-pc-windows-msvc.zip" -OutFile "bore.zip"
+        Expand-Archive -Path "bore.zip" -DestinationPath "."
+        
+        # تشغيل النفق في الخلفية
+        Start-Process -FilePath ".\bore.exe" -ArgumentList "local 3389 --to bore.pub" -NoNewWindow -RedirectStandardError "bore.err"
+        Start-Sleep -Seconds 10
 
     - name: Show Connection Details
       run: |
-        $log = Get-Content tunnel.out -Raw -ErrorAction SilentlyContinue
-        $err = Get-Content tunnel.err -Raw -ErrorAction SilentlyContinue
-        $all_logs = "$log $err"
+        $log = Get-Content bore.err -Raw -ErrorAction SilentlyContinue
+        Write-Host "Bore Logs:"
+        Write-Host $log
         
-        Write-Host "Tunnel Logs:"
-        Write-Host $all_logs
-        
-        # استخراج الـ IP الخاص بـ Pinggy
-        $matches = [regex]::Matches($all_logs, 'tcp://([a-zA-Z0-9.-]+:\d+)')
-        if ($matches.Count -gt 0) {
-            $rdp_ip = $matches[0].Groups[1].Value
+        # استخراج العنوان من السجلات
+        if ($log -match 'listening at (bore\.pub:\d+)') {
+            $rdp_ip = $matches[1]
             Write-Host "====================================="
             Write-Host "RDP IP: $rdp_ip" -ForegroundColor Green
             Write-Host "Username: runneradmin"
             Write-Host "Password: P@ssw0rd!"
             Write-Host "====================================="
         } else {
-            Write-Host "Could not find IP in tunnel logs. Please check the logs above." -ForegroundColor Red
+            Write-Host "Could not find IP in tunnel logs." -ForegroundColor Red
         }
+        
         # إبقاء السيرفر يعمل لمدة 6 ساعات
         Start-Sleep -Seconds 21600
