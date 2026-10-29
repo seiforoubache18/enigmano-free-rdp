@@ -14,21 +14,30 @@ jobs:
         Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -name "fDenyTSConnections" -Value 0
         Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
         Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -name "UserAuthentication" -Value 0
-        Set-LocalUser -Name "runneradmin" -Password (ConvertTo-SecureString -AsPlainText "P@ssw0rd!" -Force)
 
     - name: Start Ngrok Tunnel
       env:
         NGROK_TOKEN: ${{ secrets.NGROK_SHAHZAIB }}
       run: |
+        if ("$env:NGROK_TOKEN" -eq "") {
+            Write-Error "NGROK_TOKEN is empty! Please check your GitHub Secret."
+            exit 1
+        }
         Invoke-WebRequest https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-windows-amd64.zip -OutFile ngrok.zip
         Expand-Archive ngrok.zip -DestinationPath .
-        .\ngrok.exe config add-authtoken $env:NGROK_TOKEN
-        Start-Process -FilePath .\ngrok.exe -ArgumentList "tcp 3389" -NoNewWindow
+        .\ngrok.exe config add-authtoken "$env:NGROK_TOKEN"
+        Start-Job -ScriptBlock { .\ngrok.exe tcp 3389 }
+        Start-Sleep -Seconds 20
 
     - name: Show Connection Details
       run: |
-        Start-Sleep -Seconds 15
+        Write-Host "Checking Ngrok API..."
         $response = Invoke-RestMethod http://127.0.0.1:4040/api/tunnels
+        if (-not $response.tunnels) {
+            Write-Error "Ngrok failed to start. Here are the logs:"
+            Receive-Job -Id 1
+            exit 1
+        }
         $rdp_ip = $response.tunnels[0].public_url -replace "tcp://", ""
         Write-Host "====================================="
         Write-Host "RDP IP: $rdp_ip"
