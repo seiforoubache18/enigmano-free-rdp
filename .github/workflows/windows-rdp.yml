@@ -14,47 +14,31 @@ jobs:
         Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -name "fDenyTSConnections" -Value 0
         Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
         Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -name "UserAuthentication" -Value 0
+        net user runneradmin "P@ssw0rd!"
 
-    - name: Start Ngrok Tunnel
-      env:
-        NGROK_TOKEN: ${{ secrets.NGROK_SHAHZAIB }}
+    - name: Start SSH Tunnel (No Card Required)
       run: |
-        Invoke-WebRequest https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-windows-amd64.zip -OutFile ngrok.zip
-        Expand-Archive ngrok.zip -DestinationPath .
-        .\ngrok.exe config add-authtoken "$env:NGROK_TOKEN"
-        Start-Process -FilePath .\ngrok.exe -ArgumentList "tcp 3389" -NoNewWindow -RedirectStandardOutput "ngrok.log" -RedirectStandardError "ngrok.err"
-        Start-Sleep -Seconds 10
+        # استخدام خدمة localhost.run المجانية لإنشاء نفق TCP
+        Start-Process -FilePath "ssh" -ArgumentList "-o StrictHostKeyChecking=no -o ServerAliveInterval=60 -R 0:localhost:3389 nokey@localhost.run" -NoNewWindow -RedirectStandardOutput "tunnel.out" -RedirectStandardError "tunnel.err"
+        Start-Sleep -Seconds 20
 
     - name: Show Connection Details
       run: |
-        $connected = $false
-        for ($i=1; $i -le 10; $i++) {
-            Start-Sleep -Seconds 5
-            Write-Host "Attempt $i to fetch IP..."
-            try {
-                $response = Invoke-RestMethod http://127.0.0.1:4040/api/tunnels
-                if ($response.tunnels -and $response.tunnels.Count -gt 0) {
-                    $rdp_ip = $response.tunnels[0].public_url -replace "tcp://", ""
-                    Write-Host "====================================="
-                    Write-Host "RDP IP: $rdp_ip" -ForegroundColor Green
-                    Write-Host "Username: runneradmin"
-                    Write-Host "Password: P@ssw0rd!"
-                    Write-Host "====================================="
-                    $connected = $true
-                    break
-                }
-            } catch {
-                Write-Host "API not ready yet..."
-            }
+        $log = Get-Content tunnel.err -Raw -ErrorAction SilentlyContinue
+        $log2 = Get-Content tunnel.out -Raw -ErrorAction SilentlyContinue
+        $all_logs = "$log $log2"
+        
+        Write-Host "Tunnel Logs:"
+        Write-Host $all_logs
+        
+        if ($all_logs -match '(tcp://[a-zA-Z0-9.-]+:\d+)') {
+            $rdp_ip = $matches[1] -replace "tcp://", ""
+            Write-Host "====================================="
+            Write-Host "RDP IP: $rdp_ip" -ForegroundColor Green
+            Write-Host "Username: runneradmin"
+            Write-Host "Password: P@ssw0rd!"
+            Write-Host "====================================="
+        } else {
+            Write-Host "Could not find IP in tunnel logs. Please check the logs above." -ForegroundColor Red
         }
-
-        if (-not $connected) {
-            Write-Host "Error: Could not get IP from Ngrok API." -ForegroundColor Red
-            Write-Host "--- Ngrok Log ---"
-            Get-Content ngrok.log -ErrorAction SilentlyContinue
-            Write-Host "--- Ngrok Error ---"
-            Get-Content ngrok.err -ErrorAction SilentlyContinue
-            exit 1
-        }
-
         Start-Sleep -Seconds 21600
