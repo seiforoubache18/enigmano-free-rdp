@@ -23,17 +23,20 @@ jobs:
         Invoke-WebRequest -Uri "https://github.com/ekzhang/bore/releases/download/v0.5.0/bore-v0.5.0-x86_64-pc-windows-msvc.zip" -OutFile "bore.zip"
         Expand-Archive -Path "bore.zip" -DestinationPath "."
         
-        # تشغيل النفق وإبقائه يعمل
-        Start-Process -FilePath ".\bore.exe" -ArgumentList "local 3389 --to bore.pub" -NoNewWindow -RedirectStandardOutput "bore.log" -RedirectStandardError "bore.log"
+        # استخدام CMD لتجنب خطأ PowerShell في إعادة التوجيه
+        Start-Process -FilePath "cmd.exe" -ArgumentList "/c .\bore.exe local 3389 --to bore.pub > bore_out.log 2> bore_err.log" -NoNewWindow
         Start-Sleep -Seconds 10
 
     - name: Show Connection Details
       run: |
-        $log = Get-Content bore.log -Raw -ErrorAction SilentlyContinue
-        Write-Host "Bore Logs:" -ForegroundColor Yellow
-        Write-Host $log
+        $out_log = Get-Content bore_out.log -Raw -ErrorAction SilentlyContinue
+        $err_log = Get-Content bore_err.log -Raw -ErrorAction SilentlyContinue
+        $all_logs = "$out_log $err_log"
         
-        if ($log -match 'listening at (bore\.pub:\d+)') {
+        Write-Host "Bore Logs:" -ForegroundColor Yellow
+        Write-Host $all_logs
+        
+        if ($all_logs -match 'listening at (bore\.pub:\d+)') {
             $rdp_ip = $matches[1]
             Write-Host "====================================="
             Write-Host "RDP IP: $rdp_ip" -ForegroundColor Green
@@ -44,5 +47,4 @@ jobs:
             Write-Host "Could not find IP. Check logs." -ForegroundColor Red
         }
         
-        # إبقاء السيرفر شغالاً
         Start-Sleep -Seconds 21600
